@@ -1,30 +1,157 @@
 {% extends "base.html" %}
 {% block title %}Review – LearnLoop{% endblock %}
+
 {% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 
-<div class="review-container">
-  <p class="progress">{{ remaining }} remaining</p>
+<div class="review-wrap">
 
-  <div class="card">
-    <h2>{{ topic.title }}</h2>
-    {% if topic.category %}<span class="tag">{{ topic.category }}</span>{% endif %}
-
-    <details class="notes-reveal">
-      <summary>Show my notes</summary>
-      <p class="notes-text">{{ topic.notes }}</p>
-    </details>
+  <div class="review-header">
+    <div>
+      <h2>{{ topic.title }}</h2>
+      {% if topic.category %}<span class="tag">{{ topic.category }}</span>{% endif %}
+    </div>
+    <div class="review-meta">
+      <span class="progress">{{ remaining }} left</span>
+      <button class="btn-ghost" onclick="generateLesson()">Generate lesson</button>
+    </div>
   </div>
 
-  <form method="POST" action="/review/{{ topic.id }}">
-    <p class="rating-label">How well did you remember it?</p>
-    <div class="rating-buttons">
-      <button name="rating" value="1" class="btn-rate btn-1">1 &ndash; Forgot</button>
-      <button name="rating" value="2" class="btn-rate btn-2">2 &ndash; Hard</button>
-      <button name="rating" value="3" class="btn-rate btn-3">3 &ndash; Okay</button>
-      <button name="rating" value="4" class="btn-rate btn-4">4 &ndash; Good</button>
-      <button name="rating" value="5" class="btn-rate btn-5">5 &ndash; Perfect</button>
-    </div>
-  </form>
+  <details class="notes-collapse">
+    <summary>My notes</summary>
+    <p class="notes-text">{{ topic.notes }}</p>
+  </details>
+
+  <div class="chat-area" id="chat-area"></div>
+
+  <div class="chat-input-row">
+    <textarea id="user-input" rows="2" placeholder="Type your answer… (Enter to send, Shift+Enter for newline)"></textarea>
+    <button id="send-btn" onclick="sendMessage()">Send</button>
+  </div>
+
+  <div class="rating-section" id="rating-section" style="display:none">
+    <p class="rating-label">Rate yourself</p>
+    <form method="POST" action="/review/{{ topic.id }}">
+      <div class="rating-buttons">
+        <button name="rating" value="1" class="btn-rate btn-1">1 — Forgot</button>
+        <button name="rating" value="2" class="btn-rate btn-2">2 — Hard</button>
+        <button name="rating" value="3" class="btn-rate btn-3">3 — Okay</button>
+        <button name="rating" value="4" class="btn-rate btn-4">4 — Good</button>
+        <button name="rating" value="5" class="btn-rate btn-5">5 — Perfect</button>
+      </div>
+    </form>
+  </div>
+
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script>
+const TOPIC_ID = {{ topic.id }};
+let messages = [];
+
+function renderMath(el) {
+  renderMathInElement(el, {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '$', right: '$', display: false },
+    ],
+    throwOnError: false,
+  });
+}
+
+function addUserBubble(text) {
+  const area = document.getElementById('chat-area');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-user';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+  area.appendChild(wrap);
+  area.scrollTop = area.scrollHeight;
+}
+
+async function streamAiBubble(url, body, extraClass) {
+  const area = document.getElementById('chat-area');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-ai' + (extraClass ? ' ' + extraClass : '');
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  wrap.appendChild(bubble);
+  area.appendChild(wrap);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const line of dec.decode(value).split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6);
+      if (payload === '[DONE]') break;
+      try {
+        full += JSON.parse(payload).text;
+        bubble.innerHTML = full;
+        area.scrollTop = area.scrollHeight;
+      } catch (_) {}
+    }
+  }
+
+  renderMath(bubble);
+  return full;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  addUserBubble(text);
+  messages.push({ role: 'user', content: text });
+
+  setInputDisabled(true);
+  const reply = await streamAiBubble(`/api/chat/${TOPIC_ID}`, { messages }, '');
+  messages.push({ role: 'assistant', content: reply });
+  setInputDisabled(false);
+
+  document.getElementById('rating-section').style.display = 'block';
+}
+
+async function generateLesson() {
+  const area = document.getElementById('chat-area');
+  const header = document.createElement('p');
+  header.className = 'lesson-label';
+  header.textContent = 'Generated lesson';
+  area.appendChild(header);
+
+  await streamAiBubble(`/api/lesson/${TOPIC_ID}`, {}, 'msg-lesson');
+}
+
+function setInputDisabled(on) {
+  document.getElementById('send-btn').disabled = on;
+  document.getElementById('user-input').disabled = on;
+}
+
+document.getElementById('user-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// Start: AI asks the first question
+(async () => {
+  setInputDisabled(true);
+  const reply = await streamAiBubble(`/api/chat/${TOPIC_ID}`, { messages: [] }, '');
+  messages.push({ role: 'assistant', content: reply });
+  setInputDisabled(false);
+})();
+</script>
 {% endblock %}
