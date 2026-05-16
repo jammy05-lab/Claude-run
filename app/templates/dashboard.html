@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if due_count > 0 %}
+<div class="due-card">
+  <h2>{{ due_count }} topic{{ 's' if due_count != 1 else '' }} due today</h2>
+  <p>about {{ est_minutes }} minute{{ 's' if est_minutes != 1 else '' }}</p>
+  <a href="/review" class="btn">Start Review &rarr;</a>
+</div>
+{% else %}
+<div class="done-card">
+  <h2>All caught up</h2>
+  <p>No reviews due today. Come back tomorrow.</p>
+  <a href="/add" class="btn btn-outline">+ Add something new</a>
+</div>
+{% endif %}
+
+<section class="topics-list">
+  <h3>All Topics ({{ topics|length }})</h3>
+  {% if topics %}
+    {% for topic in topics %}
+    <div class="topic-item">
+      <span class="topic-title">{{ topic.title }}</span>
+      <span class="topic-meta">
+        {% if topic.category %}<span class="tag">{{ topic.category }}</span>{% endif %}
+        next: {{ topic.next_review_date }}
+      </span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty">Nothing yet. <a href="/add">Add your first topic.</a></p>
+  {% endif %}
+</section>
+
+{% endblock %}

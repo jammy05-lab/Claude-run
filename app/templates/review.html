@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Review – LearnLoop{% endblock %}
+{% block content %}
+
+<div class="review-container">
+  <p class="progress">{{ remaining }} remaining</p>
+
+  <div class="card">
+    <h2>{{ topic.title }}</h2>
+    {% if topic.category %}<span class="tag">{{ topic.category }}</span>{% endif %}
+
+    <details class="notes-reveal">
+      <summary>Show my notes</summary>
+      <p class="notes-text">{{ topic.notes }}</p>
+    </details>
+  </div>
+
+  <form method="POST" action="/review/{{ topic.id }}">
+    <p class="rating-label">How well did you remember it?</p>
+    <div class="rating-buttons">
+      <button name="rating" value="1" class="btn-rate btn-1">1 &ndash; Forgot</button>
+      <button name="rating" value="2" class="btn-rate btn-2">2 &ndash; Hard</button>
+      <button name="rating" value="3" class="btn-rate btn-3">3 &ndash; Okay</button>
+      <button name="rating" value="4" class="btn-rate btn-4">4 &ndash; Good</button>
+      <button name="rating" value="5" class="btn-rate btn-5">5 &ndash; Perfect</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
